@@ -93,7 +93,9 @@ export default function Checklist({
       if (!res.ok) throw new Error(String(res.status));
       const data: State = await res.json();
       setState(withPending(data, loadQueue()));
-      setError(null);
+      setError((e) =>
+        e && e.startsWith("Can't reach the log") ? null : e,
+      );
     } catch {
       setError("Can't reach the log right now. Ticks are being held on this phone.");
     } finally {
@@ -138,17 +140,26 @@ export default function Checklist({
           break;
         }
 
-        // 2xx, or a 4xx that retrying won't fix — drop it either way.
+        // A 4xx won't fix itself on retry, so drop the job — but say why,
+        // rather than letting the screen quietly revert.
+        if (!res.ok) {
+          let message = `That didn't save (error ${res.status}).`;
+          try {
+            const body = (await res.json()) as { error?: string };
+            if (body?.error) message = body.error;
+          } catch {
+            /* no JSON body — keep the generic message */
+          }
+          setError(message);
+        }
+
         const after = loadQueue().filter((j) => j.id !== job.id);
         saveQueue(after);
         setQueue(after);
       }
     } finally {
       flushing.current = false;
-      if (loadQueue().length === 0) {
-        setError(null);
-        await refresh(type);
-      }
+      if (loadQueue().length === 0) await refresh(type);
     }
   }, [type, refresh]);
 

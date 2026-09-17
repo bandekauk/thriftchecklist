@@ -4566,7 +4566,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/app/page.js": {
-      "bytes": 27997,
+      "bytes": 27792,
       "imports": [
         {
           "path": ".open-next/server-functions/default/node_modules/next/dist/shared/lib/router/utils/app-paths.js",
@@ -6948,7 +6948,7 @@
           "bytesInOutput": 3575
         },
         ".open-next/server-functions/default/.next/server/app/page.js": {
-          "bytesInOutput": 28445
+          "bytesInOutput": 28235
         },
         ".open-next/server-functions/default/node_modules/next/dist/server/require.js": {
           "bytesInOutput": 11810
@@ -7065,7 +7065,7 @@
           "bytesInOutput": 56900
         }
       },
-      "bytes": 2851583
+      "bytes": 2851373
     }
   }
 }

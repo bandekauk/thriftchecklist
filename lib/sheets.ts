@@ -267,13 +267,24 @@ export async function createRun(
   };
 }
 
+/**
+ * Find a run's real sheet row by its id rather than trusting an array
+ * offset — blank or note rows above the data would otherwise shift it.
+ */
+async function findRunRow(runId: string): Promise<number> {
+  const col = await read(`${SHEETS.runs}!A:A`);
+  for (let i = col.length - 1; i >= 0; i--) {
+    if ((col[i]?.[0] ?? "") === runId) return i + 1; // col[0] is sheet row 1
+  }
+  return -1;
+}
+
 export async function completeRun(run: Run, user: string, at: string) {
-  if (run.rowIndex < 0) return;
-  await write(`${SHEETS.runs}!F${run.rowIndex}:H${run.rowIndex}`, [
-    at,
-    user,
-    "complete",
-  ]);
+  const row = await findRunRow(run.runId);
+  if (row < 2) {
+    throw new Error(`Could not find run ${run.runId} in the Runs sheet`);
+  }
+  await write(`${SHEETS.runs}!F${row}:H${row}`, [at, user, "complete"]);
 }
 
 export async function addTick(e: TickEvent) {
