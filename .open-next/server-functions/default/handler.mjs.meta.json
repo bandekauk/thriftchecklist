@@ -3916,7 +3916,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/app/api/complete/route.js": {
-      "bytes": 13281,
+      "bytes": 13333,
       "imports": [
         {
           "path": ".open-next/server-functions/default/node_modules/next/dist/shared/lib/router/utils/app-paths.js",
@@ -4038,7 +4038,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/app/api/state/route.js": {
-      "bytes": 13036,
+      "bytes": 13088,
       "imports": [
         {
           "path": ".open-next/server-functions/default/node_modules/next/dist/shared/lib/router/utils/app-paths.js",
@@ -4094,7 +4094,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/app/api/tick/route.js": {
-      "bytes": 13257,
+      "bytes": 13309,
       "imports": [
         {
           "path": ".open-next/server-functions/default/node_modules/next/dist/shared/lib/router/utils/app-paths.js",
@@ -6885,16 +6885,16 @@
           "bytesInOutput": 8025
         },
         ".open-next/server-functions/default/.next/server/app/api/complete/route.js": {
-          "bytesInOutput": 13675
+          "bytesInOutput": 13736
         },
         ".open-next/server-functions/default/.next/server/app/_not-found/page.js": {
           "bytesInOutput": 16980
         },
         ".open-next/server-functions/default/.next/server/app/api/state/route.js": {
-          "bytesInOutput": 13431
+          "bytesInOutput": 13492
         },
         ".open-next/server-functions/default/.next/server/app/api/tick/route.js": {
-          "bytesInOutput": 13657
+          "bytesInOutput": 13718
         },
         "optional-deps-missing-dependency:/critters": {
           "bytesInOutput": 141
@@ -7065,7 +7065,7 @@
           "bytesInOutput": 56900
         }
       },
-      "bytes": 2852015
+      "bytes": 2852198
     }
   }
 }

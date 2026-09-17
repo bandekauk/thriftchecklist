@@ -174,12 +174,23 @@ async function read(range: string): Promise<string[][]> {
   return ((data.values as string[][]) ?? []).map((r) => r ?? []);
 }
 
-async function append(range: string, row: (string | number)[]) {
-  await call(
-    `values/${encodeURIComponent(range)}:append` +
-      `?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
-    { method: "POST", body: JSON.stringify({ values: [row] }) },
-  );
+/**
+ * Append a row at a known position.
+ *
+ * Google's :append endpoint guesses where the "table" in a range ends, and
+ * a stray note or blank row makes it guess wrong — it will happily start
+ * writing into the wrong columns and then keep doing so. Instead: find the
+ * first genuinely empty row by reading column A, and write there explicitly.
+ */
+async function append(
+  tab: string,
+  lastColumn: string,
+  row: (string | number)[],
+) {
+  const col = await read(`${tab}!A:A`);
+  let next = col.length + 1; // col[0] is sheet row 1
+  if (next < 2) next = 2; // never overwrite the header
+  await write(`${tab}!A${next}:${lastColumn}${next}`, row);
 }
 
 async function write(range: string, row: (string | number)[]) {
@@ -244,7 +255,7 @@ export async function createRun(
   startedAt: string,
 ): Promise<Run> {
   const runId = `${date}-${type}-${Math.random().toString(36).slice(2, 8)}`;
-  await append(`${SHEETS.runs}!A:H`, [
+  await append(SHEETS.runs, "H", [
     runId,
     date,
     type,
@@ -285,7 +296,7 @@ export async function completeRun(run: Run, user: string, at: string) {
 }
 
 export async function addTick(e: TickEvent) {
-  await append(`${SHEETS.ticks}!A:F`, [
+  await append(SHEETS.ticks, "F", [
     e.runId,
     e.item,
     e.action,
