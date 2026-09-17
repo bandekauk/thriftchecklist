@@ -195,7 +195,8 @@ async function write(range: string, row: (string | number)[]) {
 
 /** Checklist definition lives in the sheet, so it can be edited without a deploy. */
 export async function getChecklist(type: string): Promise<ChecklistItem[]> {
-  const rows = await read(`${SHEETS.checklist}!A2:D`);
+  const all = await read(`${SHEETS.checklist}!A:D`);
+  const rows = all.slice(1); // drop the header row
   return rows
     .filter((r) => (r[0] ?? "").trim().toLowerCase() === type)
     .sort((a, b) => Number(a[1] ?? 0) - Number(b[1] ?? 0))
@@ -227,9 +228,10 @@ function parseRun(row: string[], rowIndex: number): Run {
  * can finish it. Individual ticks still record who did them.
  */
 export async function findRun(date: string, type: string): Promise<Run | null> {
-  const rows = await read(`${SHEETS.runs}!A2:H`);
-  for (let i = rows.length - 1; i >= 0; i--) {
-    const run = parseRun(rows[i], i + 2);
+  const rows = await read(`${SHEETS.runs}!A:H`);
+  // rows[0] is the header; rows[i] is sheet row i + 1.
+  for (let i = rows.length - 1; i >= 1; i--) {
+    const run = parseRun(rows[i], i + 1);
     if (run.date === date && run.type === type) return run;
   }
   return null;
@@ -253,18 +255,13 @@ export async function createRun(
     "open",
   ]);
   const created = await findRun(date, type);
-  if (created) return created;
-  return {
-    rowIndex: -1,
-    runId,
-    date,
-    type,
-    startedBy: user,
-    startedAt,
-    completedAt: "",
-    completedBy: "",
-    status: "open",
-  };
+  if (!created) {
+    throw new Error(
+      "Wrote a run to the Runs sheet but could not read it back — " +
+        "check the tab is named Runs and its headers are in row 1.",
+    );
+  }
+  return created;
 }
 
 /**
@@ -305,7 +302,8 @@ export async function addTick(e: TickEvent) {
 export async function getTickState(
   runId: string,
 ): Promise<Record<string, { at: string; user: string }>> {
-  const rows = await read(`${SHEETS.ticks}!A2:F`);
+  const all = await read(`${SHEETS.ticks}!A:F`);
+  const rows = all.slice(1); // drop the header row
   const state: Record<string, { at: string; user: string }> = {};
   for (const r of rows) {
     if ((r[0] ?? "") !== runId) continue;
