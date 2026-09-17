@@ -54,6 +54,17 @@ function saveQueue(q: Pending[]) {
   }
 }
 
+/** Layer un-sent queued ticks back over whatever the server returned. */
+function withPending(base: State, pending: Pending[]): State {
+  const ticked = { ...base.ticked };
+  for (const job of pending) {
+    if (job.kind !== "tick" || job.type !== base.type || !job.item) continue;
+    if (job.action === "unticked") delete ticked[job.item];
+    else ticked[job.item] = { at: job.at, user: base.user };
+  }
+  return { ...base, ticked };
+}
+
 export default function Checklist({
   initialType,
   firstName,
@@ -74,12 +85,14 @@ export default function Checklist({
     setQueue(loadQueue());
   }, []);
 
+  // Server state is the base; anything still queued on this phone is layered
+  // back on top, so a tick that hasn't been sent yet never disappears.
   const refresh = useCallback(async (t: ChecklistType) => {
     try {
       const res = await fetch(`/api/state?type=${t}`, { cache: "no-store" });
       if (!res.ok) throw new Error(String(res.status));
       const data: State = await res.json();
-      setState(data);
+      setState(withPending(data, loadQueue()));
       setError(null);
     } catch {
       setError("Can't reach the log right now. Ticks are being held on this phone.");
@@ -93,40 +106,46 @@ export default function Checklist({
     refresh(type);
   }, [type, refresh]);
 
-  // Send anything held on the device, oldest first, stopping at the first failure
-  // so the order of events is preserved.
+  // Send what's held on the device, oldest first, stopping at the first
+  // failure so the order of events is preserved. Each job is removed from
+  // the queue as it lands, read fresh each time — a tick made mid-flush
+  // must never be overwritten by a stale snapshot.
   const flush = useCallback(async () => {
     if (flushing.current) return;
-    const current = loadQueue();
-    if (current.length === 0) return;
+    if (loadQueue().length === 0) return;
     flushing.current = true;
 
-    let remaining = [...current];
     try {
-      while (remaining.length > 0) {
-        const job = remaining[0];
-        const url = job.kind === "tick" ? "/api/tick" : "/api/complete";
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(job),
-        });
-        if (res.status >= 500 || res.status === 0) break; // server down, retry later
+      for (;;) {
+        const pending = loadQueue();
+        if (pending.length === 0) break;
+        const job = pending[0];
+
+        let res: Response;
+        try {
+          res = await fetch(job.kind === "tick" ? "/api/tick" : "/api/complete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(job),
+          });
+        } catch {
+          break; // offline — keep everything for next time
+        }
+
+        if (res.status >= 500) break; // server down, retry later
         if (res.status === 401) {
           setError("Signed out. Sign in again to save what's held on this phone.");
           break;
         }
-        // 2xx, or a 4xx we can't fix by retrying — drop it either way.
-        remaining = remaining.slice(1);
-        saveQueue(remaining);
+
+        // 2xx, or a 4xx that retrying won't fix — drop it either way.
+        const after = loadQueue().filter((j) => j.id !== job.id);
+        saveQueue(after);
+        setQueue(after);
       }
-    } catch {
-      // offline — keep the queue for next time
     } finally {
-      saveQueue(remaining);
-      setQueue(remaining);
       flushing.current = false;
-      if (remaining.length === 0) {
+      if (loadQueue().length === 0) {
         setError(null);
         await refresh(type);
       }
@@ -181,7 +200,7 @@ export default function Checklist({
     });
 
     enqueue({
-      id: `${at}-${item.item}`,
+      id: `${at}-${Math.random().toString(36).slice(2, 8)}`,
       kind: "tick",
       type,
       item: item.item,
@@ -198,7 +217,12 @@ export default function Checklist({
         ? { ...s, run: s.run ? { ...s.run, status: "complete", completedAt: at } : s.run }
         : s,
     );
-    enqueue({ id: `${at}-complete`, kind: "complete", type, at });
+    enqueue({
+      id: `${at}-complete-${Math.random().toString(36).slice(2, 8)}`,
+      kind: "complete",
+      type,
+      at,
+    });
   }
 
   const items = state?.items ?? [];
