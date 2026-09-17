@@ -24,6 +24,19 @@ export function shopTime(iso: string): string {
   }).format(d);
 }
 
+/** "2026-09-17" -> "Thu 17 Sep", for the header. */
+export function shopDateLabel(date: string): string {
+  if (!date) return "";
+  const d = new Date(`${date}T12:00:00Z`);
+  if (Number.isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: TZ,
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  }).format(d);
+}
+
 /** Before 15:00 we assume they're opening, after that they're closing. */
 export function defaultType(d: Date = new Date()): "startup" | "shutdown" {
   const hour = Number(

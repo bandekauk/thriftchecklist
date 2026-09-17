@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { shopTime } from "../lib/time";
+import { shopTime, shopDate, shopDateLabel } from "../lib/time";
 import { nameOf } from "../lib/name";
 
 type Item = { item: string; required: boolean };
@@ -133,6 +133,19 @@ export default function Checklist({
     }
   }, [type, refresh]);
 
+  // A phone asleep since last night wakes on yesterday's data — re-check on focus.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh(type);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [type, refresh]);
+
   useEffect(() => {
     flush();
     const onOnline = () => flush();
@@ -217,7 +230,9 @@ export default function Checklist({
     <div className="app" data-mode={type}>
       <header className="header">
         <div className="header-top">
-          <span className="who">{firstName}</span>
+          <span className="who">
+            {firstName} · {shopDateLabel(state?.date ?? "")}
+          </span>
           <form action={signOutAction}>
             <button type="submit" className="signout">
               Sign out
@@ -248,6 +263,12 @@ export default function Checklist({
         </button>
       </nav>
 
+      {state && state.date !== shopDate() && (
+        <p className="strip" data-tone="error">
+          This is {shopDateLabel(state.date)}, not today. Pull down to reload
+          before ticking anything.
+        </p>
+      )}
       {queue.length > 0 && (
         <p className="strip">
           {queue.length} {queue.length === 1 ? "tick" : "ticks"} waiting to save.
