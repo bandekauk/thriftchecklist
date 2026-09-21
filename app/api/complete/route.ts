@@ -43,6 +43,8 @@ export async function POST(req: NextRequest) {
       getChecklist(type),
       getTickState(run.runId),
     ]);
+    // A flagged item has been dealt with honestly, so it doesn't block
+    // sign-off — but the run is marked so the problem is visible in Runs.
     const missing = items.filter((i) => i.required && !ticked[i.item]);
     if (missing.length > 0) {
       return NextResponse.json(
@@ -51,8 +53,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    await completeRun(run, user, at);
-    return NextResponse.json({ ok: true });
+    const problems = Object.values(ticked).filter(
+      (t) => t.state === "problem",
+    ).length;
+
+    await completeRun(
+      run,
+      user,
+      at,
+      problems > 0 ? "complete-with-problems" : "complete",
+    );
+    return NextResponse.json({ ok: true, problems });
   } catch (err) {
     console.error("complete failed", err);
     return NextResponse.json(

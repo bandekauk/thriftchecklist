@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "../../../auth";
-import { getChecklist, findRun, getTickState } from "../../../lib/sheets";
+import {
+  getChecklist,
+  findRunsForDate,
+  getTickState,
+} from "../../../lib/sheets";
 import { shopDate } from "../../../lib/time";
 
 export const dynamic = "force-dynamic";
@@ -19,11 +23,25 @@ export async function GET(req: NextRequest) {
   const date = shopDate();
 
   try {
-    const [items, run] = await Promise.all([
+    const [items, runs] = await Promise.all([
       getChecklist(type),
-      findRun(date, type),
+      findRunsForDate(date),
     ]);
+    const run = runs[type] ?? null;
     const ticked = run ? await getTickState(run.runId) : {};
+
+    // Both days' runs go back, so the tabs can show what's already done.
+    const summarise = (t: string) => {
+      const r = runs[t];
+      if (!r) return null;
+      return {
+        status: r.status,
+        startedBy: r.startedBy,
+        startedAt: r.startedAt,
+        completedBy: r.completedBy,
+        completedAt: r.completedAt,
+      };
+    };
 
     return NextResponse.json({
       user: session.user.email,
@@ -41,6 +59,10 @@ export async function GET(req: NextRequest) {
             status: run.status,
           }
         : null,
+      summary: {
+        startup: summarise("startup"),
+        shutdown: summarise("shutdown"),
+      },
       ticked,
     });
   } catch (err) {

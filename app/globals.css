@@ -136,6 +136,19 @@ button {
   border-bottom-color: var(--mode);
 }
 
+.tab-note {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--muted);
+  margin-top: 0.15rem;
+}
+
+.strip[data-tone="done"] {
+  background: var(--mode-soft);
+  color: var(--ink);
+}
+
 /* ---------- items ---------- */
 
 .list {
@@ -149,20 +162,102 @@ button {
   border-bottom: 1px solid var(--line);
 }
 
-.item button {
-  width: 100%;
+.item-row {
+  display: flex;
+  align-items: stretch;
+}
+
+.item-main {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 1rem;
   background: none;
   border: none;
-  padding: 1rem 1.25rem;
+  padding: 1rem 0.5rem 1rem 1.25rem;
   text-align: left;
   min-height: 68px;
 }
 
-.item button:active {
+.item-main:active {
   background: var(--mode-soft);
+}
+
+.flag {
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  border-left: 1px solid var(--line);
+  padding: 0 1rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.item[data-problem="true"] {
+  background: rgba(138, 106, 0, 0.09);
+}
+
+.item[data-problem="true"] .box {
+  background: var(--amber);
+  border-color: var(--amber);
+}
+
+.item[data-problem="true"] .box::after {
+  content: "!";
+  position: absolute;
+  inset: 0;
+  border: none;
+  transform: none;
+  color: #fff;
+  font-weight: 600;
+  font-size: 1.05rem;
+  line-height: 24px;
+  text-align: center;
+}
+
+.item[data-problem="true"] .label {
+  color: var(--ink);
+}
+
+.note {
+  display: block;
+  font-size: 0.88rem;
+  color: var(--amber);
+  margin-top: 0.15rem;
+}
+
+.report {
+  padding: 0 1.25rem 1.1rem;
+}
+
+.report label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+}
+
+.report textarea {
+  width: 100%;
+  background: var(--field, #fff);
+  border: 1px solid var(--line);
+  padding: 0.6rem;
+  font: inherit;
+  font-size: 0.95rem;
+  margin-bottom: 0.75rem;
+  resize: vertical;
+}
+
+.problem-count {
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+  color: var(--amber);
+  text-align: center;
+}
+
+.action[data-problems="true"] {
+  background: var(--amber);
 }
 
 .box {
@@ -174,12 +269,12 @@ button {
   position: relative;
 }
 
-.item[data-done="true"] .box {
+.item[data-done="true"]:not([data-problem="true"]) .box {
   background: var(--mode);
   border-color: var(--mode);
 }
 
-.item[data-done="true"] .box::after {
+.item[data-done="true"]:not([data-problem="true"]) .box::after {
   content: "";
   position: absolute;
   left: 8px;
@@ -197,6 +292,10 @@ button {
 
 .item[data-done="true"] .label {
   color: var(--muted);
+}
+
+:root {
+  --field: #fff;
 }
 
 .optional {
@@ -242,6 +341,46 @@ button {
   color: var(--muted);
   border: 1px solid var(--line);
   cursor: default;
+}
+
+.correction {
+  display: block;
+  width: 100%;
+  margin-top: 0.75rem;
+  padding: 0.6rem;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 0.9rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.confirm {
+  margin-top: 0.75rem;
+  border-top: 1px solid var(--line);
+  padding-top: 0.75rem;
+}
+
+.confirm p {
+  margin: 0 0 0.75rem;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.ghost {
+  flex: 1;
+  min-height: 48px;
+  background: none;
+  border: 1px solid var(--ink);
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 500;
 }
 
 .done-note {

@@ -21,16 +21,24 @@ export type Run = {
   startedAt: string;
   completedAt: string;
   completedBy: string;
-  status: "open" | "complete";
+  status: string; // open | complete | complete-with-problems
 };
+
+export type TickAction =
+  | "ticked"
+  | "unticked"
+  | "problem"
+  | "signed-off"
+  | "reopened";
 
 export type TickEvent = {
   runId: string;
   item: string;
-  action: "ticked" | "unticked";
+  action: TickAction;
   at: string; // when it actually happened (client clock, may be offline)
   user: string;
   loggedAt: string; // when the server received it
+  note?: string; // what's wrong, for a problem
 };
 
 const SHEETS = {
@@ -230,7 +238,7 @@ function parseRun(row: string[], rowIndex: number): Run {
     startedAt: row[4] ?? "",
     completedAt: row[5] ?? "",
     completedBy: row[6] ?? "",
-    status: (row[7] as Run["status"]) ?? "open",
+    status: row[7] ?? "open",
   };
 }
 
@@ -246,6 +254,19 @@ export async function findRun(date: string, type: string): Promise<Run | null> {
     if (run.date === date && run.type === type) return run;
   }
   return null;
+}
+
+/** Both of a day's runs in one read, keyed by type. */
+export async function findRunsForDate(
+  date: string,
+): Promise<Record<string, Run>> {
+  const rows = await read(`${SHEETS.runs}!A:H`);
+  const out: Record<string, Run> = {};
+  for (let i = 1; i < rows.length; i++) {
+    const run = parseRun(rows[i], i + 1);
+    if (run.date === date && run.type) out[run.type] = run;
+  }
+  return out;
 }
 
 export async function createRun(
@@ -287,24 +308,67 @@ async function findRunRow(runId: string): Promise<number> {
   return -1;
 }
 
-export async function completeRun(run: Run, user: string, at: string) {
+export async function completeRun(
+  run: Run,
+  user: string,
+  at: string,
+  status: "complete" | "complete-with-problems" = "complete",
+) {
   const row = await findRunRow(run.runId);
   if (row < 2) {
     throw new Error(`Could not find run ${run.runId} in the Runs sheet`);
   }
-  await write(`${SHEETS.runs}!F${row}:H${row}`, [at, user, "complete"]);
+  await write(`${SHEETS.runs}!F${row}:H${row}`, [at, user, status]);
+  // The Runs row only ever shows the latest sign-off. Recording the event
+  // here means a later correction can't erase that this one happened.
+  await addTick({
+    runId: run.runId,
+    item: "",
+    action: "signed-off",
+    at,
+    user,
+    loggedAt: new Date().toISOString(),
+  });
+}
+
+/**
+ * Unlock a signed-off run so a mistake can be corrected. Nothing is deleted:
+ * the reopening is recorded, and the original sign-off stays in the event log.
+ */
+export async function reopenRun(run: Run, user: string, at: string) {
+  const row = await findRunRow(run.runId);
+  if (row < 2) {
+    throw new Error(`Could not find run ${run.runId} in the Runs sheet`);
+  }
+  await write(`${SHEETS.runs}!F${row}:H${row}`, ["", "", "open"]);
+  await addTick({
+    runId: run.runId,
+    item: "",
+    action: "reopened",
+    at,
+    user,
+    loggedAt: new Date().toISOString(),
+  });
 }
 
 export async function addTick(e: TickEvent) {
-  await append(SHEETS.ticks, "F", [
+  await append(SHEETS.ticks, "G", [
     e.runId,
     e.item,
     e.action,
     e.at,
     e.user,
     e.loggedAt,
+    e.note ?? "",
   ]);
 }
+
+export type ItemState = {
+  state: "ticked" | "problem";
+  at: string;
+  user: string;
+  note: string;
+};
 
 /**
  * The Ticks sheet is append-only, so current state is the last event
@@ -312,16 +376,26 @@ export async function addTick(e: TickEvent) {
  */
 export async function getTickState(
   runId: string,
-): Promise<Record<string, { at: string; user: string }>> {
-  const all = await read(`${SHEETS.ticks}!A:F`);
+): Promise<Record<string, ItemState>> {
+  const all = await read(`${SHEETS.ticks}!A:G`);
   const rows = all.slice(1); // drop the header row
-  const state: Record<string, { at: string; user: string }> = {};
+  const state: Record<string, ItemState> = {};
   for (const r of rows) {
     if ((r[0] ?? "") !== runId) continue;
     const item = r[1] ?? "";
     const action = r[2] ?? "ticked";
-    if (action === "unticked") delete state[item];
-    else state[item] = { at: r[3] ?? "", user: r[4] ?? "" };
+    // signed-off and reopened are run-level events, not item state
+    if (!item) continue;
+    if (action === "unticked") {
+      delete state[item];
+    } else if (action === "ticked" || action === "problem") {
+      state[item] = {
+        state: action === "problem" ? "problem" : "ticked",
+        at: r[3] ?? "",
+        user: r[4] ?? "",
+        note: r[6] ?? "",
+      };
+    }
   }
   return state;
 }
