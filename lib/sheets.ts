@@ -182,23 +182,73 @@ async function read(range: string): Promise<string[][]> {
   return ((data.values as string[][]) ?? []).map((r) => r ?? []);
 }
 
+const gids = new Map<string, number>();
+
+/** Tab name to numeric sheet id, needed for structural edits. Cached. */
+async function sheetGid(tab: string): Promise<number> {
+  const hit = gids.get(tab);
+  if (hit !== undefined) return hit;
+
+  const res = await fetch(
+    `${API}/${sheetId()}?fields=sheets(properties(sheetId,title))`,
+    { headers: { Authorization: `Bearer ${await accessToken()}` } },
+  );
+  if (!res.ok) throw new Error(`Sheets ${res.status}: ${await res.text()}`);
+  const data = (await res.json()) as {
+    sheets?: { properties?: { sheetId?: number; title?: string } }[];
+  };
+  for (const sh of data.sheets ?? []) {
+    const t = sh.properties?.title;
+    const id = sh.properties?.sheetId;
+    if (t && typeof id === "number") gids.set(t, id);
+  }
+
+  const found = gids.get(tab);
+  if (found === undefined) throw new Error(`No tab named "${tab}" in the sheet`);
+  return found;
+}
+
 /**
- * Append a row at a known position.
+ * Write a new row directly under the header, pushing everything else down,
+ * so the newest event is always the first thing you see.
  *
- * Google's :append endpoint guesses where the "table" in a range ends, and
- * a stray note or blank row makes it guess wrong — it will happily start
- * writing into the wrong columns and then keep doing so. Instead: find the
- * first genuinely empty row by reading column A, and write there explicitly.
+ * Google's :append endpoint is deliberately avoided: it guesses where the
+ * "table" in a range ends, and a stray note or blank row makes it guess
+ * wrong — it will start writing into the wrong columns and keep doing so.
  */
 async function append(
   tab: string,
   lastColumn: string,
   row: (string | number)[],
 ) {
-  const col = await read(`${tab}!A:A`);
-  let next = col.length + 1; // col[0] is sheet row 1
-  if (next < 2) next = 2; // never overwrite the header
-  await write(`${tab}!A${next}:${lastColumn}${next}`, row);
+  const gid = await sheetGid(tab);
+
+  await fetch(`${API}/${sheetId()}:batchUpdate`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${await accessToken()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      requests: [
+        {
+          insertDimension: {
+            range: {
+              sheetId: gid,
+              dimension: "ROWS",
+              startIndex: 1, // 0-based, so this is sheet row 2
+              endIndex: 2,
+            },
+            inheritFromBefore: false,
+          },
+        },
+      ],
+    }),
+  }).then(async (r) => {
+    if (!r.ok) throw new Error(`Sheets ${r.status}: ${await r.text()}`);
+  });
+
+  await write(`${tab}!A2:${lastColumn}2`, row);
 }
 
 async function write(range: string, row: (string | number)[]) {
@@ -248,8 +298,8 @@ function parseRun(row: string[], rowIndex: number): Run {
  */
 export async function findRun(date: string, type: string): Promise<Run | null> {
   const rows = await read(`${SHEETS.runs}!A:H`);
-  // rows[0] is the header; rows[i] is sheet row i + 1.
-  for (let i = rows.length - 1; i >= 1; i--) {
+  // rows[0] is the header; rows[i] is sheet row i + 1. Newest first.
+  for (let i = 1; i < rows.length; i++) {
     const run = parseRun(rows[i], i + 1);
     if (run.date === date && run.type === type) return run;
   }
@@ -264,7 +314,8 @@ export async function findRunsForDate(
   const out: Record<string, Run> = {};
   for (let i = 1; i < rows.length; i++) {
     const run = parseRun(rows[i], i + 1);
-    if (run.date === date && run.type) out[run.type] = run;
+    // newest first, so only the first row for a type counts
+    if (run.date === date && run.type && !out[run.type]) out[run.type] = run;
   }
   return out;
 }
@@ -302,7 +353,7 @@ export async function createRun(
  */
 async function findRunRow(runId: string): Promise<number> {
   const col = await read(`${SHEETS.runs}!A:A`);
-  for (let i = col.length - 1; i >= 0; i--) {
+  for (let i = 0; i < col.length; i++) {
     if ((col[i]?.[0] ?? "") === runId) return i + 1; // col[0] is sheet row 1
   }
   return -1;
@@ -380,22 +431,27 @@ export async function getTickState(
   const all = await read(`${SHEETS.ticks}!A:G`);
   const rows = all.slice(1); // drop the header row
   const state: Record<string, ItemState> = {};
+  // Rows are newest first, so the first event seen for an item is the
+  // current one — anything below it has already been superseded.
+  const settled = new Set<string>();
   for (const r of rows) {
     if ((r[0] ?? "") !== runId) continue;
     const item = r[1] ?? "";
     const action = r[2] ?? "ticked";
     // signed-off and reopened are run-level events, not item state
     if (!item) continue;
-    if (action === "unticked") {
-      delete state[item];
-    } else if (action === "ticked" || action === "problem") {
-      state[item] = {
-        state: action === "problem" ? "problem" : "ticked",
-        at: r[3] ?? "",
-        user: r[4] ?? "",
-        note: r[6] ?? "",
-      };
+    if (action !== "ticked" && action !== "unticked" && action !== "problem") {
+      continue;
     }
+    if (settled.has(item)) continue;
+    settled.add(item);
+    if (action === "unticked") continue; // latest word is "not done"
+    state[item] = {
+      state: action === "problem" ? "problem" : "ticked",
+      at: r[3] ?? "",
+      user: r[4] ?? "",
+      note: r[6] ?? "",
+    };
   }
   return state;
 }
